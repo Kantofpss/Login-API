@@ -1,4 +1,4 @@
-# app.py - O CÓDIGO COMPLETO DA SUA API DE LOGIN
+# app.py - O CÓDIGO COMPLETO DA SUA API DE LOGIN (COM NOVO USUÁRIO)
 
 from flask import Flask, request, jsonify
 import hashlib
@@ -8,15 +8,19 @@ app = Flask(__name__)
 
 # --- BANCO DE DADOS SIMULADO ---
 # Em um projeto real, isso seria um banco de dados de verdade (SQLite, PostgreSQL, etc.)
-# Para nosso exemplo, um dicionário é perfeito para começar.
 #
-# O campo 'hwid' como 'None' indica que o usuário é novo e o HWID será 
+# O campo 'hwid' como 'None' indica que o usuário é novo e o HWID será
 # registrado automaticamente no primeiro login bem-sucedido.
 # Para segurança, armazenamos o HASH da key, e não a key em si.
 USUARIOS_DB = {
     "MarinLove": {
         "key_hash": hashlib.sha256("157171".encode()).hexdigest(),
         "hwid": None
+    },
+    # --- NOVO USUÁRIO ADICIONADO AQUI ---
+    "GDG": {
+        "key_hash": hashlib.sha256("1022".encode()).hexdigest(),
+        "hwid": None  # HWID será registrado no primeiro login
     },
     # Exemplo de um segundo usuário que já teria um HWID registrado
     "outro_user": {
@@ -55,7 +59,7 @@ def handle_login():
 
     # Calcula o hash da key recebida para comparar com o hash no banco de dados
     key_hash_cliente = hashlib.sha256(key_recebida.encode()).hexdigest()
-    
+
     if key_hash_cliente != USUARIOS_DB[usuario]["key_hash"]:
         return jsonify({"status": "falha", "mensagem": "Key (senha) incorreta."}), 401  # Unauthorized
 
@@ -71,14 +75,14 @@ def handle_login():
             "status": "sucesso",
             "mensagem": "Login bem-sucedido! Seu hardware foi registrado."
         }), 200
-    
+
     elif hwid_servidor == hwid_cliente:
         # LOGIN NORMAL: O HWID enviado pelo cliente é o mesmo que está registrado.
         return jsonify({
             "status": "sucesso",
             "mensagem": "Login bem-sucedido!"
         }), 200
-        
+
     else:
         # FALHA DE HWID: O cliente está tentando logar de uma máquina não autorizada.
         return jsonify({
