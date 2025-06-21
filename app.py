@@ -1,4 +1,4 @@
-# app.py - O CÓDIGO DA SUA API
+# app.py - O CÓDIGO COMPLETO DA SUA API DE LOGIN
 
 from flask import Flask, request, jsonify
 import hashlib
@@ -8,16 +8,20 @@ app = Flask(__name__)
 
 # --- BANCO DE DADOS SIMULADO ---
 # Em um projeto real, isso seria um banco de dados de verdade (SQLite, PostgreSQL, etc.)
-# Para nosso exemplo, um dicionário é perfeito.
-# Deixei o campo 'hwid' como None para simular o registro automático no primeiro login.
+# Para nosso exemplo, um dicionário é perfeito para começar.
+#
+# O campo 'hwid' como 'None' indica que o usuário é novo e o HWID será 
+# registrado automaticamente no primeiro login bem-sucedido.
+# Para segurança, armazenamos o HASH da key, e não a key em si.
 USUARIOS_DB = {
     "MarinLove": {
-        "key_hash": hashlib.sha256("157171".encode()).hexdigest(), # Armazenamos o hash da key, não a key pura
-        "hwid": None  # HWID será preenchido no primeiro login
+        "key_hash": hashlib.sha256("157171".encode()).hexdigest(),
+        "hwid": None
     },
+    # Exemplo de um segundo usuário que já teria um HWID registrado
     "outro_user": {
         "key_hash": hashlib.sha256("senha123".encode()).hexdigest(),
-        "hwid": "hwid_ja_registrado_como_exemplo"
+        "hwid": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2" # HWID de exemplo
     }
 }
 # -----------------------------
@@ -25,60 +29,70 @@ USUARIOS_DB = {
 @app.route('/api/login', methods=['POST'])
 def handle_login():
     """
-    Endpoint principal que lida com as tentativas de login.
+    Endpoint principal que lida com as tentativas de login do seu programa cliente.
+    Ele espera receber um JSON com 'usuario', 'key' e 'hwid'.
     """
-    # 1. Pega os dados enviados pelo cliente (seu programa .exe)
-    data = request.get_json()
-    if not data:
-        return jsonify({"status": "falha", "mensagem": "Dados não enviados"}), 400
+    # 1. Tenta obter os dados JSON enviados na requisição
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"status": "falha", "mensagem": "Requisição sem dados JSON"}), 400
+    except Exception:
+        return jsonify({"status": "falha", "mensagem": "Formato de requisição inválido"}), 400
 
+    # 2. Extrai as informações do JSON
     usuario = data.get('usuario')
-    key = data.get('key')
+    key_recebida = data.get('key')
     hwid_cliente = data.get('hwid')
 
-    if not all([usuario, key, hwid_cliente]):
-        return jsonify({"status": "falha", "mensagem": "Faltam dados (usuário, key ou hwid)"}), 400
+    # Verifica se todos os campos necessários foram enviados
+    if not all([usuario, key_recebida, hwid_cliente]):
+        return jsonify({"status": "falha", "mensagem": "Dados incompletos. É necessário enviar 'usuario', 'key' e 'hwid'."}), 400
 
-    # 2. Verifica o usuário
+    # 3. Lógica de Autenticação
     if usuario not in USUARIOS_DB:
-        return jsonify({"status": "falha", "mensagem": "Usuário não encontrado"}), 401 # 401 Unauthorized
+        return jsonify({"status": "falha", "mensagem": "Usuário não encontrado."}), 401  # Unauthorized
 
-    # 3. Verifica a key (comparando os hashes)
-    key_hash_cliente = hashlib.sha256(key.encode()).hexdigest()
+    # Calcula o hash da key recebida para comparar com o hash no banco de dados
+    key_hash_cliente = hashlib.sha256(key_recebida.encode()).hexdigest()
+    
     if key_hash_cliente != USUARIOS_DB[usuario]["key_hash"]:
-        return jsonify({"status": "falha", "mensagem": "Key (senha) incorreta"}), 401
+        return jsonify({"status": "falha", "mensagem": "Key (senha) incorreta."}), 401  # Unauthorized
 
-    # 4. Verifica o HWID (lógica de registro automático)
+    # 4. Lógica de Verificação e Registro de HWID
     hwid_servidor = USUARIOS_DB[usuario]["hwid"]
 
     if hwid_servidor is None:
-        # PRIMEIRO LOGIN: Registra o HWID do cliente no nosso "banco de dados"
+        # PRIMEIRO LOGIN: O HWID no "banco de dados" está vazio.
+        # Registramos o HWID do cliente e damos acesso.
         USUARIOS_DB[usuario]["hwid"] = hwid_cliente
-        # Nota: Em um sistema real, você salvaria essa alteração no banco de dados.
-        # Como estamos usando um dicionário, essa alteração só dura enquanto a API estiver rodando.
-        # Para persistência, precisaríamos de um arquivo ou banco de dados real.
+        # Em um sistema real, você salvaria essa alteração no banco de dados aqui.
         return jsonify({
             "status": "sucesso",
-            "mensagem": "Login bem-sucedido! Hardware registrado com sucesso."
+            "mensagem": "Login bem-sucedido! Seu hardware foi registrado."
         }), 200
+    
     elif hwid_servidor == hwid_cliente:
-        # LOGIN NORMAL: O HWID bate com o que está registrado
+        # LOGIN NORMAL: O HWID enviado pelo cliente é o mesmo que está registrado.
         return jsonify({
             "status": "sucesso",
             "mensagem": "Login bem-sucedido!"
         }), 200
+        
     else:
-        # FALHA DE HWID: O HWID do cliente não é o mesmo que está registrado
+        # FALHA DE HWID: O cliente está tentando logar de uma máquina não autorizada.
         return jsonify({
             "status": "falha",
-            "mensagem": "Falha de autenticação de Hardware (HWID). Esta licença está em uso em outro PC."
-        }), 403 # 403 Forbidden
+            "mensagem": "Falha de Hardware (HWID). A licença está vinculada a outro computador."
+        }), 403  # Forbidden
 
-# Rota de teste para ver se a API está no ar
 @app.route('/')
 def index():
-    return "API de Autenticação no ar!"
+    """ Rota inicial apenas para verificar se a API está online. """
+    return "API de Autenticação v1.0 - Online"
 
-# (Opcional) Para testar localmente antes de enviar para o servidor
+# A linha abaixo permite rodar a API localmente para testes com o comando 'python app.py'
+# A Render/Gunicorn não usará esta linha, mas é útil para desenvolvimento.
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    # Roda o servidor na rede local (0.0.0.0) na porta 8080
+    app.run(host='0.0.0.0', port=8080)
