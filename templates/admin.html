@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel de Administração</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #121212; color: #e0e0e0; margin: 2em; }
+        h1, h2 { color: #bb86fc; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; border: 1px solid #333; text-align: left; }
+        th { background-color: #1f1f1f; }
+        tr:nth-child(even) { background-color: #1e1e1e; }
+        button { background-color: #bb86fc; color: #121212; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button:hover { background-color: #9e66de; }
+        button.disabled { background-color: #555; cursor: not-allowed; }
+        .hwid-cell { font-family: monospace; color: #03dac6; }
+        .no-hwid { color: #cf6679; }
+        input[type="password"] { padding: 10px; background-color: #222; border: 1px solid #444; color: white; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+    <h1>Painel de Administração</h1>
+
+    <div id="auth-section">
+        <h2>Autenticação</h2>
+        <input type="password" id="admin-password" placeholder="Digite a senha do painel">
+        <button onclick="loadUsers()">Carregar Usuários</button>
+    </div>
+
+    <div id="user-table-section" style="display:none;">
+        <h2>Gerenciamento de Usuários</h2>
+        <table id="user-table">
+            <thead>
+                <tr>
+                    <th>Usuário</th>
+                    <th>HWID Registrado</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                </tbody>
+        </table>
+    </div>
+
+    <script>
+        const API_BASE = '/admin/api';
+
+        async function loadUsers() {
+            const password = document.getElementById('admin-password').value;
+            if (!password) {
+                alert('Por favor, digite a senha de administrador.');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/users`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: password })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Falha na autenticação ou erro no servidor.');
+                }
+
+                const users = await response.json();
+                const tableBody = document.querySelector("#user-table tbody");
+                tableBody.innerHTML = ''; // Limpa a tabela antes de preencher
+
+                users.forEach(user => {
+                    const row = document.createElement('tr');
+                    const hwidDisplay = user.hwid 
+                        ? `<span class="hwid-cell">${user.hwid}</span>` 
+                        : `<span class="no-hwid">Não registrado</span>`;
+                    
+                    const resetButton = user.hwid
+                        ? `<button onclick="resetHwid('${user.username}')">Resetar HWID</button>`
+                        : `<button class="disabled" disabled>Resetar HWID</button>`;
+
+                    row.innerHTML = `
+                        <td>${user.username}</td>
+                        <td>${hwidDisplay}</td>
+                        <td>${resetButton}</td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+                
+                // Exibe a tabela e oculta a autenticação
+                document.getElementById('auth-section').style.display = 'none';
+                document.getElementById('user-table-section').style.display = 'block';
+
+            } catch (error) {
+                alert(`Erro ao carregar usuários: ${error.message}`);
+            }
+        }
+
+        async function resetHwid(username) {
+            if (!confirm(`Tem certeza que deseja resetar o HWID do usuário '${username}'?`)) {
+                return;
+            }
+            
+            const password = document.getElementById('admin-password').value;
+
+            try {
+                const response = await fetch(`${API_BASE}/reset_hwid`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: username, password: password })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Falha ao resetar o HWID.');
+                }
+
+                alert(`HWID de '${username}' resetado com sucesso!`);
+                loadUsers(); // Recarrega a lista de usuários para mostrar a mudança
+            } catch (error) {
+                alert(`Erro: ${error.message}`);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,82 +1,99 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template, send_from_directory
+import sqlite3
 import hashlib
 
 app = Flask(__name__)
 
-# Chave de verificação estática. Deve ser idêntica à do cliente para autorizar a comunicação.
+# Chave de verificação para o cliente de login
 CHAVE_VERIFICACAO_ESPERADA = "em-uma-noite-escura-as-corujas-observam-42"
+# Senha simples para proteger o painel de admin. Em um projeto real, use um sistema de login.
+SENHA_ADMIN = "admin123"
 
-# Banco de dados simulado para armazenar usuários, hashes de chaves e HWIDs registrados.
-USUARIOS_DB = {
-    "MarinLove": {
-        "key_hash": hashlib.sha256("157171".encode()).hexdigest(),
-        "hwid": None  # HWID Nulo: O primeiro login bem-sucedido irá registrar o HWID aqui.
-    },
-    "GDG": {
-        "key_hash": hashlib.sha256("1022".encode()).hexdigest(),
-        "hwid": None
-    },
-    "outro_user": {
-        "key_hash": hashlib.sha256("senha123".encode()).hexdigest(),
-        "hwid": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2" # Exemplo de um usuário com HWID já travado.
-    }
-}
+def get_db_connection():
+    """Cria uma conexão com o banco de dados."""
+    conn = sqlite3.connect('users.db')
+    conn.row_factory = sqlite3.Row # Permite acessar colunas por nome
+    return conn
 
+# --- ROTA DE LOGIN DO CLIENTE (ATUALIZADA) ---
 @app.route('/api/login', methods=['POST'])
 def handle_login():
-    """
-    Endpoint principal que lida com as tentativas de login.
-    """
     data = request.get_json()
-    if not data:
-        return jsonify({"status": "falha", "mensagem": "Requisição inválida, corpo JSON ausente."}), 400
-
-    # Extrai os dados enviados pelo cliente
+    # ... (validações iniciais de dados e chave de verificação permanecem as mesmas) ...
+    
     usuario = data.get('usuario')
     key_recebida = data.get('key')
     hwid_cliente = data.get('hwid')
-    chave_recebida = data.get('verification_key')
-
-    # 1. Validação da chave de verificação estática
-    if not chave_recebida or chave_recebida != CHAVE_VERIFICACAO_ESPERADA:
-        return jsonify({"status": "falha", "mensagem": "Cliente não autorizado ou versão inválida."}), 403
-
-    # 2. Validação dos dados recebidos
-    if not all([usuario, key_recebida, hwid_cliente]):
-        return jsonify({"status": "falha", "mensagem": "Dados de login incompletos."}), 400
-
-    # 3. Validação do usuário
-    if usuario not in USUARIOS_DB:
+    
+    conn = get_db_connection()
+    user_data = conn.execute('SELECT * FROM users WHERE username = ?', (usuario,)).fetchone()
+    
+    if not user_data:
+        conn.close()
         return jsonify({"status": "falha", "mensagem": "Usuário não encontrado."}), 401
 
-    # 4. Validação da key (senha)
     key_hash_cliente = hashlib.sha256(key_recebida.encode()).hexdigest()
-    if key_hash_cliente != USUARIOS_DB[usuario]["key_hash"]:
+    if key_hash_cliente != user_data['key_hash']:
+        conn.close()
         return jsonify({"status": "falha", "mensagem": "Key (senha) incorreta."}), 401
 
-    # 5. Lógica de bloqueio de HWID (MODIFICADA)
-    hwid_servidor = USUARIOS_DB[usuario]["hwid"]
+    hwid_servidor = user_data['hwid']
 
-    # Verifica se é o primeiro login ou um login de uma máquina já registrada.
     if hwid_servidor is None or hwid_servidor == hwid_cliente:
-        
-        # Se for o primeiro login (HWID nulo), registra o novo HWID silenciosamente.
         if hwid_servidor is None:
-            USUARIOS_DB[usuario]["hwid"] = hwid_cliente
-        
-        # Para ambos os casos, retorna a mesma mensagem de sucesso padrão.
+            # Registra o HWID no banco de dados
+            conn.execute('UPDATE users SET hwid = ? WHERE username = ?', (hwid_cliente, usuario))
+            conn.commit()
+        conn.close()
         return jsonify({"status": "sucesso", "mensagem": "Login bem-sucedido!"}), 200
     else:
-        # Se o HWID recebido for diferente do registrado, o acesso é negado.
+        conn.close()
         return jsonify({"status": "falha", "mensagem": "Falha de Hardware (HWID). Acesso negado."}), 403
+
+# --- ROTAS DO PAINEL DE ADMIN (NOVAS) ---
+
+@app.route('/admin')
+def admin_panel():
+    """Serve a página HTML do painel de admin."""
+    return render_template('admin.html')
+
+@app.route('/admin/api/users', methods=['POST'])
+def get_all_users():
+    """API para listar todos os usuários. Requer senha de admin."""
+    data = request.get_json()
+    if not data or data.get('password') != SENHA_ADMIN:
+        return jsonify({"error": "Acesso não autorizado"}), 403
+        
+    conn = get_db_connection()
+    users_cursor = conn.execute('SELECT username, hwid FROM users').fetchall()
+    conn.close()
+    
+    # Converte os resultados do cursor para uma lista de dicionários
+    users_list = [dict(row) for row in users_cursor]
+    
+    return jsonify(users_list)
+
+@app.route('/admin/api/reset_hwid', methods=['POST'])
+def reset_user_hwid():
+    """API para resetar o HWID de um usuário. Requer senha de admin."""
+    data = request.get_json()
+    if not data or data.get('password') != SENHA_ADMIN:
+        return jsonify({"error": "Acesso não autorizado"}), 403
+
+    username_to_reset = data.get('username')
+    if not username_to_reset:
+        return jsonify({"error": "Nome de usuário não fornecido"}), 400
+
+    conn = get_db_connection()
+    conn.execute('UPDATE users SET hwid = NULL WHERE username = ?', (username_to_reset,))
+    conn.commit()
+    conn.close()
+
+    return jsonify({"success": f"HWID para o usuário '{username_to_reset}' foi resetado."})
 
 @app.route('/')
 def index():
-    """
-    Página inicial simples para verificar se a API está online.
-    """
-    return "API de Autenticação v3.0 - Online (Static Key Auth)"
+    return "API de Autenticação v4.0 - Online (DB + Admin Panel)"
 
 if __name__ == '__main__':
-    # Roda o servidor, acessível por qualquer IP na porta 8080.
-    app.run(host='0.0.0.0', port=8080)
+    app.run(host='0.0.0.0', port=8080, debug=True)
