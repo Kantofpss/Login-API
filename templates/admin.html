@@ -1,37 +1,37 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Painel de Administração</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #121212; color: #e0e0e0; margin: 2em; }
-        h1, h2 { color: #bb86fc; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { padding: 12px; border: 1px solid #333; text-align: left; }
-        th { background-color: #1f1f1f; }
-        tr:nth-child(even) { background-color: #1e1e1e; }
-        button { background-color: #bb86fc; color: #121212; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
-        button:hover { background-color: #9e66de; }
-        button.disabled { background-color: #555; cursor: not-allowed; }
-        .hwid-cell { font-family: monospace; color: #03dac6; }
-        .no-hwid { color: #cf6679; }
-        input[type="password"] { padding: 10px; background-color: #222; border: 1px solid #444; color: white; border-radius: 4px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid black; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .form-container { margin-top: 20px; }
     </style>
 </head>
 <body>
-
     <h1>Painel de Administração</h1>
 
-    <div id="auth-section">
+    <section>
         <h2>Autenticação</h2>
-        <input type="password" id="admin-password" placeholder="Digite a senha do painel">
-        <button onclick="loadUsers()">Carregar Usuários</button>
-    </div>
+        <button id="load-users">Carregar Usuários</button>
+    </section>
 
-    <div id="user-table-section" style="display:none;">
+    <section class="form-container">
+        <h2>Criar Novo Usuário</h2>
+        <form id="create-user-form">
+            <label for="new-username">Usuário:</label><br>
+            <input type="text" id="new-username" name="new-username" required><br><br>
+            <label for="new-password">Senha:</label><br>
+            <input type="password" id="new-password" name="new-password" required><br><br>
+            <button type="submit">Criar Usuário</button>
+        </form>
+    </section>
+
+    <section>
         <h2>Gerenciamento de Usuários</h2>
-        <table id="user-table">
+        <table>
             <thead>
                 <tr>
                     <th>Usuário</th>
@@ -39,26 +39,18 @@
                     <th>Ações</th>
                 </tr>
             </thead>
-            <tbody>
-                </tbody>
+            <tbody id="user-table-body">
+            </tbody>
         </table>
-    </div>
+    </section>
 
     <script>
-        const API_BASE = '/admin/api';
-
-        async function loadUsers() {
-            const password = document.getElementById('admin-password').value;
-            if (!password) {
-                alert('Por favor, digite a senha de administrador.');
-                return;
-            }
-
+        document.getElementById('load-users').addEventListener('click', async () => {
             try {
-                const response = await fetch(`${API_BASE}/users`, {
+                const response = await fetch('/admin/api/users', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password: password })
+                    body: JSON.stringify({ password: 'admin123' })
                 });
 
                 if (!response.ok) {
@@ -66,58 +58,65 @@
                 }
 
                 const users = await response.json();
-                const tableBody = document.querySelector("#user-table tbody");
-                tableBody.innerHTML = ''; // Limpa a tabela antes de preencher
-
+                const tableBody = document.getElementById('user-table-body');
+                tableBody.innerHTML = '';
                 users.forEach(user => {
                     const row = document.createElement('tr');
-                    const hwidDisplay = user.hwid 
-                        ? `<span class="hwid-cell">${user.hwid}</span>` 
-                        : `<span class="no-hwid">Não registrado</span>`;
-                    
-                    const resetButton = user.hwid
-                        ? `<button onclick="resetHwid('${user.username}')">Resetar HWID</button>`
-                        : `<button class="disabled" disabled>Resetar HWID</button>`;
-
                     row.innerHTML = `
                         <td>${user.username}</td>
-                        <td>${hwidDisplay}</td>
-                        <td>${resetButton}</td>
+                        <td>${user.hwid || 'Nenhum'}</td>
+                        <td><button onclick="resetHwid('${user.username}')">Resetar HWID</button></td>
                     `;
                     tableBody.appendChild(row);
                 });
-                
-                // Exibe a tabela e oculta a autenticação
-                document.getElementById('auth-section').style.display = 'none';
-                document.getElementById('user-table-section').style.display = 'block';
-
             } catch (error) {
                 alert(`Erro ao carregar usuários: ${error.message}`);
             }
-        }
+        });
 
-        async function resetHwid(username) {
-            if (!confirm(`Tem certeza que deseja resetar o HWID do usuário '${username}'?`)) {
-                return;
-            }
-            
-            const password = document.getElementById('admin-password').value;
+        document.getElementById('create-user-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('new-username').value;
+            const password = document.getElementById('new-password').value;
 
             try {
-                const response = await fetch(`${API_BASE}/reset_hwid`, {
+                const response = await fetch('/admin/api/create_user', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: username, password: password })
+                    body: JSON.stringify({ password: 'admin123', username: username, password_user: password })
                 });
 
-                if (!response.ok) {
-                    throw new Error('Falha ao resetar o HWID.');
+                const result = await response.json();
+                if (response.ok) {
+                    alert(result.success);
+                    document.getElementById('new-username').value = '';
+                    document.getElementById('new-password').value = '';
+                    document.getElementById('load-users').click(); // Recarrega a tabela
+                } else {
+                    alert(result.error);
                 }
-
-                alert(`HWID de '${username}' resetado com sucesso!`);
-                loadUsers(); // Recarrega a lista de usuários para mostrar a mudança
             } catch (error) {
-                alert(`Erro: ${error.message}`);
+                alert(`Erro ao criar usuário: ${error.message}`);
+            }
+        });
+
+        async function resetHwid(username) {
+            try {
+                const response = await fetch('/admin/api/reset_hwid', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: 'admin123', username: username })
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    alert(result.success);
+                    document.getElementById('load-users').click(); // Recarrega a tabela
+                } else {
+                    alert(result.error);
+                }
+            } catch (error) {
+                alert(`Erro ao resetar HWID: ${error.message}`);
             }
         }
     </script>
