@@ -3,7 +3,10 @@ import hashlib
 
 app = Flask(__name__)
 
-# Banco de dados simulado (igual ao original)
+# NOVO: Chave de verificação estática. Deve ser idêntica à do cliente.
+CHAVE_VERIFICACAO_ESPERADA = "em-uma-noite-escura-as-corujas-observam-42"
+
+# Banco de dados simulado
 USUARIOS_DB = {
     "MarinLove": {
         "key_hash": hashlib.sha256("157171".encode()).hexdigest(),
@@ -23,11 +26,17 @@ USUARIOS_DB = {
 def handle_login():
     data = request.get_json()
     if not data:
-        return jsonify({"status": "falha", "mensagem": "Requisição sem dados JSON"}), 400
+        return jsonify({"status": "falha", "mensagem": "Requisição inválida"}), 400
 
     usuario = data.get('usuario')
     key_recebida = data.get('key')
     hwid_cliente = data.get('hwid')
+    # NOVO: Recebe a chave de verificação do cliente
+    chave_recebida = data.get('verification_key')
+
+    # NOVO: Validação da chave de verificação estática
+    if not chave_recebida or chave_recebida != CHAVE_VERIFICACAO_ESPERADA:
+        return jsonify({"status": "falha", "mensagem": "Cliente não autorizado ou versão inválida."}), 403 # Forbidden
 
     if not all([usuario, key_recebida, hwid_cliente]):
         return jsonify({"status": "falha", "mensagem": "Dados incompletos"}), 400
@@ -50,7 +59,7 @@ def handle_login():
 
 @app.route('/')
 def index():
-    return "API de Autenticação v1.0 - Online"
+    return "API de Autenticação v3.0 - Online (Static Key Auth)"
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)

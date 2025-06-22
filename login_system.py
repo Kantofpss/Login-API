@@ -11,11 +11,10 @@ init(autoreset=True)
 
 # --- CONFIGURAÇÕES ---
 VELOCIDADE_LINHA = 0.05
-VELOCIDADE_MSG = 0.025
 
-# AQUI VOCÊ DEVE COLAR O HASH GERADO PELO SCRIPT 'gerar_hash.py'
-# Se você modificar este arquivo, precisa gerar e colar um novo hash.
-HASH_ESPERADO = "1da9c10cdb13a304e733304e47454f586533b20fa72ef6b969e46dc1068155c5"
+# NOVO: Chave de verificação estática. Deve ser idêntica à da API.
+# Um cracker precisaria encontrar e usar esta chave. A ofuscação esconde isso.
+CHAVE_VERIFICACAO = "em-uma-noite-escura-as-corujas-observam-42"
 
 # --- CLASSE DE CORES ---
 class Cores:
@@ -25,34 +24,17 @@ class Cores:
     SUCESSO, ERRO, AVISO, INFO, STATUS = VERDE, VERMELHO, AMARELO, AZUL, BRANCO
     PROMPT, INPUT, HWID = BRANCO, Fore.LIGHTCYAN_EX, AZUL
 
-# --- FUNÇÃO DE SEGURANÇA ---
-def verificar_integridade_script():
-    """Verifica se o hash do arquivo de script corresponde ao esperado."""
-    if HASH_ESPERADO == "COLE_O_SEU_HASH_AQUI":
-        print(f"{Cores.AVISO}[AVISO] A verificação de integridade não está configurada.")
-        print(f"{Cores.AVISO}Execute o script 'gerar_hash.py' e cole o hash na variável HASH_ESPERADO.")
-        time.sleep(4)
-        return # Permite a execução para o primeiro teste
-
-    try:
-        with open(__file__, 'rb') as f:
-            conteudo = f.read()
-            hash_atual = hashlib.sha256(conteudo).hexdigest()
-
-        if hash_atual != HASH_ESPERADO:
-            # Esta é a mensagem de erro que previne o uso de uma versão modificada
-            print(f"{Cores.ERRO}[FATAL] Corrupção de arquivo detectada ou versão adulterada. Encerrando.")
-            time.sleep(3)
-            os._exit(1)
-    except FileNotFoundError:
-        print(f"{Cores.ERRO}[FATAL] Arquivo de script não encontrado.")
+# --- FUNÇÃO DE SEGURANÇA MÍNIMA ---
+def verificar_debugger():
+    """Verifica se um debugger conhecido do Python está ativo."""
+    if sys.gettrace() is not None:
+        # Mensagem genérica para não dar pistas
+        print(f"{Cores.ERRO}Falha na inicialização do componente de segurança. Encerrando.")
         time.sleep(2)
-        os._exit(1)
+        os._exit(1) # Saída abrupta
 
-# --- FUNÇÕES UTILITÁRIAS E DE INTERFACE (iguais ao original) ---
-
+# --- FUNÇÕES UTILITÁRIAS E DE INTERFACE ---
 def get_hwid():
-    """Obtém o número de série do primeiro disco físico (HD/SSD) e o usa como HWID."""
     try:
         comando = 'wmic diskdrive get serialnumber'
         resultado = subprocess.check_output(comando, shell=True, text=True, stderr=subprocess.DEVNULL)
@@ -91,48 +73,59 @@ def menu_principal():
     print(menu_texto)
 
 def tela_de_login_servidor():
+    verificar_debugger() # Mantemos a verificação de debugger
+
     URL_CODIFICADA = "aHR0cHM6Ly9tYXJpbi1sb2dpbi1hcGkub25yZW5kZXIuY29t"
     URL_BASE = base64.b64decode(URL_CODIFICADA).decode('utf-8')
     URL_LOGIN = f"{URL_BASE}/api/login"
 
     limpar_tela()
     exibir_banner_principal()
-    print(Cores.TITULO + "--- TELA DE LOGIN (AUTENTICAÇÃO ONLINE) ---\n")
+    print(Cores.TITULO + "--- TELA DE LOGIN ---\n")
 
     try:
         usuario_input = input(f"{Cores.PROMPT}[?] Digite seu usuário: {Cores.INPUT}")
         key_input = input(f"{Cores.PROMPT}[?] Digite sua key: {Cores.INPUT}")
         hwid_atual = get_hwid()
 
-        dados_de_login = {"usuario": usuario_input, "key": key_input, "hwid": hwid_atual}
+        # Monta o pacote de dados para o servidor
+        dados_de_login = {
+            "usuario": usuario_input,
+            "key": key_input,
+            "hwid": hwid_atual,
+            "verification_key": CHAVE_VERIFICACAO # NOVO: Adiciona a chave estática ao pacote
+        }
+        
         response = requests.post(URL_LOGIN, json=dados_de_login, timeout=60)
 
-        if response.status_code == 200:
-            resposta_json = response.json()
+        resposta_json = response.json()
+
+        if response.status_code == 200 and resposta_json.get("status") == "sucesso":
             print(f"\n{Cores.SUCESSO}[SUCCESS] {resposta_json.get('mensagem')}")
             time.sleep(2)
             return usuario_input
         else:
-             mensagem_erro = response.json().get("mensagem", "Erro desconhecido.")
+             mensagem_erro = resposta_json.get("mensagem", "Erro desconhecido.")
              print(f"\n{Cores.ERRO}[ERROR] {mensagem_erro} (Código: {response.status_code})")
              time.sleep(3)
              return None
-    except requests.exceptions.RequestException as e:
-        print(Cores.ERRO + f"\n[ERROR] A conexão com o servidor falhou: {e}")
+    except requests.exceptions.RequestException:
+        print(Cores.ERRO + "\n[ERROR] A conexão com o servidor falhou.")
+        time.sleep(3)
+        return None
+    except Exception as e:
+        print(f"{Cores.ERRO}\n[ERROR] Ocorreu um erro inesperado: {e}")
         time.sleep(3)
         return None
 
 def tela_logado(nome_usuario):
-    # (Esta função permanece idêntica à original)
     limpar_tela()
     print(f"{Cores.SUCESSO}ACESSO AUTORIZADO, BEM-VINDO {nome_usuario}!")
     # ... aqui você colocaria o menu e as funções do seu programa principal
     time.sleep(5)
 
-
 def main():
-    # A verificação agora é a primeira coisa a ser feita
-    verificar_integridade_script()
+    verificar_debugger() # Verificação inicial
 
     while True:
         limpar_tela()
