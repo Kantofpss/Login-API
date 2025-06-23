@@ -16,7 +16,9 @@ jwt = JWTManager(app)
 required_env_vars = ['DB_HOST', 'DB_USER', 'DB_PASSWORD', 'DB_NAME']
 missing_vars = [var for var in required_env_vars if not os.getenv(var)]
 if missing_vars:
-    raise ValueError(f"Variáveis de ambiente faltando: {', '.join(missing_vars)}")
+    error_msg = f"Erro: Variáveis de ambiente faltando: {', '.join(missing_vars)}. Configure-as no painel do Render ou no arquivo .env."
+    app.logger.error(error_msg)
+    raise ValueError(error_msg)
 
 # Conexão com o banco de dados
 try:
@@ -28,8 +30,10 @@ try:
         port=int(os.getenv('DB_PORT', 3306)),  # Converte para inteiro, padrão 3306
         connection_timeout=30  # Timeout de 30 segundos
     )
+    app.logger.info("Conexão com o banco de dados MySQL estabelecida com sucesso.")
 except mysql.connector.Error as err:
-    print(f"Erro de conexão com o MySQL: {err}")
+    error_msg = f"Erro de conexão com o MySQL: {err}"
+    app.logger.error(error_msg)
     raise
 
 # Endpoint para login de administrador
