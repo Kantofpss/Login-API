@@ -2,18 +2,24 @@ from flask import Flask, request, jsonify
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, get_jwt
 import mysql.connector
 import bcrypt
+import os
 
 app = Flask(__name__)
-app.config['JWT_SECRET_KEY'] = 'your_jwt_secret_key'  # Substitua por uma chave segura
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your_jwt_secret_key')  # Carrega do ambiente
 jwt = JWTManager(app)
 
 # Conexão com o banco de dados
-db = mysql.connector.connect(
-    host="your_host",
-    user="your_user",
-    password="your_password",
-    database="your_database"
-)
+try:
+    db = mysql.connector.connect(
+        host=os.getenv('DB_HOST'),
+        user=os.getenv('DB_USER'),
+        password=os.getenv('DB_PASSWORD'),
+        database=os.getenv('DB_NAME'),
+        port=int(os.getenv('DB_PORT', 3306))  # Converte para inteiro, usa 3306 como padrão
+    )
+except mysql.connector.Error as err:
+    print(f"Erro de conexão com o MySQL: {err}")
+    raise
 
 # Endpoint para login de administrador
 @app.route('/admin/login', methods=['POST'])
@@ -23,7 +29,6 @@ def admin_login():
     password = data.get('password')
 
     # Verificar credenciais do administrador (exemplo simplificado)
-    # Substitua por sua lógica de autenticação (ex.: consultar tabela de admins)
     if username == 'admin' and password == 'admin123':  # Substitua por verificação real
         access_token = create_access_token(identity=username, additional_claims={'role': 'admin'})
         return jsonify({'access_token': access_token}), 200
@@ -33,7 +38,6 @@ def admin_login():
 @app.route('/users', methods=['GET'])
 @jwt_required()
 def get_users():
-    # Verificar se o usuário é admin
     current_user = get_jwt_identity()
     claims = get_jwt()
     if claims.get('role') != 'admin':
@@ -49,7 +53,6 @@ def get_users():
 @app.route('/admin/users/<int:user_id>', methods=['DELETE'])
 @jwt_required()
 def delete_user(user_id):
-    # Verificar se o usuário é admin
     current_user = get_jwt_identity()
     claims = get_jwt()
     if claims.get('role') != 'admin':
