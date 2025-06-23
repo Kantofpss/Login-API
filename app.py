@@ -1,136 +1,64 @@
-from flask import Flask, request, jsonify, render_template
-from flask_cors import CORS
-import sqlite3
-import hashlib
+from flask import Flask, request, jsonify
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, get_jwt
+import mysql.connector
+import bcrypt
 
 app = Flask(__name__)
-CORS(app)  # Habilita CORS para suportar requisições de diferentes origens
+app.config['JWT_SECRET_KEY'] = 'your_jwt_secret_key'  # Substitua por uma chave segura
+jwt = JWTManager(app)
 
-# Chave de verificação para o cliente de login
-CHAVE_VERIFICACAO_ESPERADA = "em-uma-noite-escura-as-corujas-observam-42"
-# Senha simples para proteger o painel de admin
-SENHA_ADMIN = "admin123"
+# Conexão com o banco de dados
+db = mysql.connector.connect(
+    host="your_host",
+    user="your_user",
+    password="your_password",
+    database="your_database"
+)
 
-def get_db_connection():
-    """Cria uma conexão com o banco de dados."""
-    conn = sqlite3.connect('users.db')
-    conn.row_factory = sqlite3.Row  # Permite acessar colunas por nome
-    return conn
-
-# --- ROTA DE LOGIN DO CLIENTE ---
-@app.route('/api/login', methods=['POST'])
-def handle_login():
+# Endpoint para login de administrador
+@app.route('/admin/login', methods=['POST'])
+def admin_login():
     data = request.get_json()
-    usuario = data.get('usuario')
-    key_recebida = data.get('key')
-    hwid_cliente = data.get('hwid')
-    
-    conn = get_db_connection()
-    user_data = conn.execute('SELECT * FROM users WHERE username = ?', (usuario,)).fetchone()
-    
-    if not user_data:
-        conn.close()
-        return jsonify({"status": "falha", "mensagem": "Usuário não encontrado."}), 401
-
-    key_hash_cliente = hashlib.sha256(key_recebida.encode()).hexdigest()
-    if key_hash_cliente != user_data['key_hash']:
-        conn.close()
-        return jsonify({"status": "falha", "mensagem": "Key (senha) incorreta."}), 401
-
-    hwid_servidor = user_data['hwid']
-
-    if hwid_servidor is None or hwid_servidor == hwid_cliente:
-        if hwid_servidor is None:
-            conn.execute('UPDATE users SET hwid = ? WHERE username = ?', (hwid_cliente, usuario))
-            conn.commit()
-        conn.close()
-        return jsonify({"status": "sucesso", "mensagem": "Login bem-sucedido!"}), 200
-    else:
-        conn.close()
-        return jsonify({"status": "falha", "mensagem": "Falha de Hardware (HWID). Acesso negado."}), 403
-
-# --- ROTAS DO PAINEL DE ADMIN ---
-@app.route('/admin')
-def admin_panel():
-    """Serve a página HTML do painel de admin."""
-    try:
-        return render_template('admin.html')
-    except Exception as e:
-        return str(e), 500
-
-@app.route('/admin/api/users', methods=['POST'])
-def get_all_users():
-    """API para listar todos os usuários. Requer senha de admin."""
-    data = request.get_json()
-    print(f"Requisição recebida: {data}")  # Log para depuração
-    if not data or data.get('password') != SENHA_ADMIN:
-        return jsonify({"error": "Acesso não autorizado"}), 403
-        
-    conn = get_db_connection()
-    try:
-        users_cursor = conn.execute('SELECT username, hwid FROM users').fetchall()
-        users_list = [dict(row) for row in users_cursor]
-        return jsonify(users_list)
-    except sqlite3.OperationalError as e:
-        print(f"Erro no banco de dados: {e}")
-        return jsonify({"error": "Erro no servidor: tabela 'users' não encontrada. Execute db_setup.py."}), 500
-    except Exception as e:
-        print(f"Erro inesperado: {e}")
-        return jsonify({"error": "Erro inesperado no servidor"}), 500
-    finally:
-        conn.close()
-
-@app.route('/admin/api/create_user', methods=['POST'])
-def create_user():
-    """API para criar um novo usuário. Requer senha de admin."""
-    data = request.get_json()
-    if not data or data.get('password') != SENHA_ADMIN:
-        return jsonify({"error": "Acesso não autorizado"}), 403
-
     username = data.get('username')
-    password = data.get('password_user')  # Nova senha do usuário
-    if not username or not password:
-        return jsonify({"error": "Nome de usuário e senha são obrigatórios"}), 400
+    password = data.get('password')
 
-    conn = get_db_connection()
-    try:
-        # Verifica se o usuário já existe
-        existing_user = conn.execute('SELECT username FROM users WHERE username = ?', (username,)).fetchone()
-        if existing_user:
-            return jsonify({"error": "Usuário já existe"}), 400
+    # Verificar credenciais do administrador (exemplo simplificado)
+    # Substitua por sua lógica de autenticação (ex.: consultar tabela de admins)
+    if username == 'admin' and password == 'admin123':  # Substitua por verificação real
+        access_token = create_access_token(identity=username, additional_claims={'role': 'admin'})
+        return jsonify({'access_token': access_token}), 200
+    return jsonify({'message': 'Credenciais inválidas'}), 401
 
-        # Hashea a senha do usuário
-        key_hash = hashlib.sha256(password.encode()).hexdigest()
-        conn.execute('INSERT INTO users (username, key_hash, hwid) VALUES (?, ?, NULL)', (username, key_hash))
-        conn.commit()
-        return jsonify({"success": f"Usuário '{username}' criado com sucesso!"})
-    except Exception as e:
-        print(f"Erro ao criar usuário: {e}")
-        return jsonify({"error": "Erro ao criar usuário"}), 500
-    finally:
-        conn.close()
+# Endpoint para listar usuários
+@app.route('/users', methods=['GET'])
+@jwt_required()
+def get_users():
+    # Verificar se o usuário é admin
+    current_user = get_jwt_identity()
+    claims = get_jwt()
+    if claims.get('role') != 'admin':
+        return jsonify({'message': 'Acesso negado'}), 403
 
-@app.route('/admin/api/reset_hwid', methods=['POST'])
-def reset_user_hwid():
-    """API para resetar o HWID de um usuário. Requer senha de admin."""
-    data = request.get_json()
-    if not data or data.get('password') != SENHA_ADMIN:
-        return jsonify({"error": "Acesso não autorizado"}), 403
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT id, name, email, password FROM users")
+    users = cursor.fetchall()
+    cursor.close()
+    return jsonify(users), 200
 
-    username_to_reset = data.get('username')
-    if not username_to_reset:
-        return jsonify({"error": "Nome de usuário não fornecido"}), 400
+# Endpoint para excluir usuário
+@app.route('/admin/users/<int:user_id>', methods=['DELETE'])
+@jwt_required()
+def delete_user(user_id):
+    # Verificar se o usuário é admin
+    current_user = get_jwt_identity()
+    claims = get_jwt()
+    if claims.get('role') != 'admin':
+        return jsonify({'message': 'Acesso negado'}), 403
 
-    conn = get_db_connection()
-    conn.execute('UPDATE users SET hwid = NULL WHERE username = ?', (username_to_reset,))
-    conn.commit()
-    conn.close()
+    cursor = db.cursor()
+    cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
+    db.commit()
+    cursor.close()
+    return jsonify({'message': 'Usuário excluído com sucesso'}), 200
 
-    return jsonify({"success": f"HWID para o usuário '{username_to_reset}' foi resetado."})
-
-@app.route('/')
-def index():
-    return "API de Autenticação v4.0 - Online (DB + Admin Panel)"
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080, debug=True)
+# ... (outros endpoints do seu app.py)

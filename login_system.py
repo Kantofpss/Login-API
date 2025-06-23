@@ -7,14 +7,11 @@ import requests
 import base64
 from colorama import init, Fore, Style
 
-# Inicializa o Colorama para que as cores funcionem no terminal do Windows
 init(autoreset=True)
 
-# --- CONFIGURAÇÕES ---
 CHAVE_VERIFICACAO = "em-uma-noite-escura-as-corujas-observam-42"
-URL_CODIFICADA = "aHR0cHM6Ly9tYXJpbi1sb2dpbi1hcGkub25yZW5kZXIuY29t" # URL do servidor em Base64
+URL_CODIFICADA = base64.b64encode("https://marin-login-api.onrender.com".encode()).decode('utf-8')
 
-# --- CLASSE DE CORES PARA A INTERFACE ---
 class Cores:
     BRIGHT, RESET = Style.BRIGHT, Style.RESET_ALL
     AZUL, AMARELO, VERDE, VERMELHO, BRANCO, MAGENTA = Fore.CYAN + BRIGHT, Fore.YELLOW + BRIGHT, Fore.GREEN + BRIGHT, Fore.RED + BRIGHT, Fore.WHITE + BRIGHT, Fore.MAGENTA + BRIGHT
@@ -22,19 +19,13 @@ class Cores:
     SUCESSO, ERRO, AVISO, INFO, STATUS = VERDE, VERMELHO, AMARELO, AZUL, BRANCO
     PROMPT, INPUT, HWID = BRANCO, Fore.LIGHTCYAN_EX, AZUL
 
-# --- FUNÇÃO DE SEGURANÇA MÍNIMA ---
 def verificar_debugger():
-    """Verifica se um debugger está ativo e encerra o programa se estiver."""
     if sys.gettrace() is not None:
         print(f"{Cores.ERRO}Falha na inicialização do componente de segurança. Encerrando.")
         time.sleep(2)
         os._exit(1)
 
-# --- FUNÇÕES UTILITÁRIAS E DE INTERFACE ---
 def get_hwid():
-    """
-    Obtém o número de série do disco, gera um hash SHA256 e o retorna como HWID.
-    """
     try:
         comando = 'wmic diskdrive get serialnumber'
         resultado = subprocess.check_output(comando, shell=True, text=True, stderr=subprocess.DEVNULL)
@@ -49,12 +40,7 @@ def limpar_tela():
 
 def exibir_banner_principal():
     banner_arte = r"""
-██╗  ██╗███╗   ██╗████████╗███████╗
-██║ ██╔╝████╗  ██║╚══██╔══╝╚══███╔╝
-█████╔╝ ██╔██╗ ██║   ██║     ███╔╝
-██╔═██╗ ██║╚██╗██║   ██║    ███╔╝
-██║  ██╗██║ ╚████║   ██║   ███████╗
-╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝
+KNTZ
     """
     info = f"""
 {Cores.BORDA}======================================================
@@ -145,7 +131,7 @@ def tela_logado(nome_usuario):
             elif escolha == '3':
                 print(f"{Cores.AVISO}\n[*] Fazendo logout...")
                 time.sleep(1)
-                return # Retorna ao menu principal
+                return
             else:
                 print(f"{Cores.ERRO}\n[!] Opção inválida.")
                 time.sleep(2)

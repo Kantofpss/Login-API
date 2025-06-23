@@ -2,122 +2,135 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Painel de Administração</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        table { border-collapse: collapse; width: 100%; }
-        th, td { border: 1px solid black; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
-        .form-container { margin-top: 20px; }
+        .hidden { display: none; }
     </style>
 </head>
-<body>
-    <h1>Painel de Administração</h1>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+    <!-- Formulário de Login -->
+    <div id="loginSection" class="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
+        <h2 class="text-2xl font-bold mb-6 text-center text-gray-800">Login do Administrador</h2>
+        <div id="loginError" class="hidden text-red-500 mb-4"></div>
+        <input type="text" id="adminUsername" placeholder="Usuário" class="w-full p-3 mb-4 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <input type="password" id="adminPassword" placeholder="Senha" class="w-full p-3 mb-4 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <button onclick="adminLogin()" class="w-full bg-blue-500 text-white p-3 rounded-lg hover:bg-blue-600">Entrar</button>
+    </div>
 
-    <section>
-        <h2>Autenticação</h2>
-        <button id="load-users">Carregar Usuários</button>
-    </section>
-
-    <section class="form-container">
-        <h2>Criar Novo Usuário</h2>
-        <form id="create-user-form">
-            <label for="new-username">Usuário:</label><br>
-            <input type="text" id="new-username" name="new-username" required><br><br>
-            <label for="new-password">Senha:</label><br>
-            <input type="password" id="new-password" name="new-password" required><br><br>
-            <button type="submit">Criar Usuário</button>
-        </form>
-    </section>
-
-    <section>
-        <h2>Gerenciamento de Usuários</h2>
-        <table>
+    <!-- Painel de Administração -->
+    <div id="adminPanel" class="hidden bg-white p-8 rounded-lg shadow-lg w-full max-w-4xl">
+        <h2 class="text-2xl font-bold mb-6 text-center text-gray-800">Painel de Administração</h2>
+        <table class="w-full border-collapse">
             <thead>
-                <tr>
-                    <th>Usuário</th>
-                    <th>HWID Registrado</th>
-                    <th>Ações</th>
+                <tr class="bg-gray-200">
+                    <th class="p-3 border">ID</th>
+                    <th class="p-3 border">Nome</th>
+                    <th class="p-3 border">Email</th>
+                    <th class="p-3 border">Senha (Hasheada)</th>
+                    <th class="p-3 border">Ações</th>
                 </tr>
             </thead>
-            <tbody id="user-table-body">
-            </tbody>
+            <tbody id="userTable"></tbody>
         </table>
-    </section>
+        <button onclick="logout()" class="mt-6 bg-red-500 text-white p-3 rounded-lg hover:bg-red-600">Sair</button>
+    </div>
 
     <script>
-        document.getElementById('load-users').addEventListener('click', async () => {
+        // Função para login do administrador
+        async function adminLogin() {
+            const username = document.getElementById('adminUsername').value;
+            const password = document.getElementById('adminPassword').value;
+            const errorDiv = document.getElementById('loginError');
+
             try {
-                const response = await fetch('/admin/api/users', {
+                const response = await fetch('https://marin-login-api.onrender.com/admin/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password: 'admin123' })
+                    body: JSON.stringify({ username, password })
                 });
+                const data = await response.json();
 
-                if (!response.ok) {
-                    throw new Error('Falha na autenticação ou erro no servidor.');
+                if (response.ok) {
+                    localStorage.setItem('adminToken', data.access_token);
+                    document.getElementById('loginSection').classList.add('hidden');
+                    document.getElementById('adminPanel').classList.remove('hidden');
+                    errorDiv.classList.add('hidden');
+                    loadUsers();
+                } else {
+                    errorDiv.textContent = data.message || 'Erro ao fazer login';
+                    errorDiv.classList.remove('hidden');
                 }
+            } catch (error) {
+                errorDiv.textContent = 'Erro de conexão com a API';
+                errorDiv.classList.remove('hidden');
+            }
+        }
 
+        // Carregar lista de usuários
+        async function loadUsers() {
+            try {
+                const response = await fetch('https://marin-login-api.onrender.com/users', {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('adminToken')}` }
+                });
                 const users = await response.json();
-                const tableBody = document.getElementById('user-table-body');
-                tableBody.innerHTML = '';
+                const userTable = document.getElementById('userTable');
+                userTable.innerHTML = '';
+
                 users.forEach(user => {
                     const row = document.createElement('tr');
                     row.innerHTML = `
-                        <td>${user.username}</td>
-                        <td>${user.hwid || 'Nenhum'}</td>
-                        <td><button onclick="resetHwid('${user.username}')">Resetar HWID</button></td>
+                        <td class="p-3 border">${user.id}</td>
+                        <td class="p-3 border">${user.name}</td>
+                        <td class="p-3 border">${user.email}</td>
+                        <td class="p-3 border">${user.password}</td>
+                        <td class="p-3 border">
+                            <button onclick="deleteUser(${user.id})" class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">Excluir</button>
+                        </td>
                     `;
-                    tableBody.appendChild(row);
+                    userTable.appendChild(row);
                 });
             } catch (error) {
-                alert(`Erro ao carregar usuários: ${error.message}`);
+                console.error('Erro ao carregar usuários:', error);
             }
-        });
+        }
 
-        document.getElementById('create-user-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const username = document.getElementById('new-username').value;
-            const password = document.getElementById('new-password').value;
+        // Função para excluir usuário
+        async function deleteUser(userId) {
+            if (!confirm('Tem certeza que deseja excluir este usuário?')) return;
 
             try {
-                const response = await fetch('/admin/api/create_user', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password: 'admin123', username: username, password_user: password })
+                const response = await fetch(`https://marin-login-api.onrender.com/admin/users/${userId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('adminToken')}` }
                 });
 
-                const result = await response.json();
                 if (response.ok) {
-                    alert(result.success);
-                    document.getElementById('new-username').value = '';
-                    document.getElementById('new-password').value = '';
-                    document.getElementById('load-users').click(); // Recarrega a tabela
+                    alert('Usuário excluído com sucesso!');
+                    loadUsers();
                 } else {
-                    alert(result.error);
+                    alert('Erro ao excluir usuário');
                 }
             } catch (error) {
-                alert(`Erro ao criar usuário: ${error.message}`);
+                alert('Erro de conexão com a API');
             }
-        });
+        }
 
-        async function resetHwid(username) {
-            try {
-                const response = await fetch('/admin/api/reset_hwid', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password: 'admin123', username: username })
-                });
+        // Função de logout
+        function logout() {
+            localStorage.removeItem('adminToken');
+            document.getElementById('adminPanel').classList.add('hidden');
+            document.getElementById('loginSection').classList.remove('hidden');
+            document.getElementById('adminUsername').value = '';
+            document.getElementById('adminPassword').value = '';
+        }
 
-                const result = await response.json();
-                if (response.ok) {
-                    alert(result.success);
-                    document.getElementById('load-users').click(); // Recarrega a tabela
-                } else {
-                    alert(result.error);
-                }
-            } catch (error) {
-                alert(`Erro ao resetar HWID: ${error.message}`);
-            }
+        // Verificar se já está logado
+        if (localStorage.getItem('adminToken')) {
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('adminPanel').classList.remove('hidden');
+            loadUsers();
         }
     </script>
 </body>

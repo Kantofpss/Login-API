@@ -1,7 +1,11 @@
 import sqlite3
+import os
 
 def criar_banco():
-    conn = sqlite3.connect('users.db')
+    db_path = os.path.join('/data', 'users.db')
+    if not os.path.exists('/data'):
+        os.makedirs('/data')
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
