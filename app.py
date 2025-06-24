@@ -1,7 +1,5 @@
 from flask import Flask, request, jsonify
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, get_jwt
-import mysql.connector
-import bcrypt
 import os
 from dotenv import load_dotenv
 
@@ -9,48 +7,38 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your_jwt_secret_key')  # Fallback para chave padrão
+# A chave secreta para JWT continua sendo necessária
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your_jwt_secret_key')
 jwt = JWTManager(app)
 
-# Validação das variáveis de ambiente
-required_env_vars = ['DB_HOST', 'DB_USER', 'DB_PASSWORD', 'DB_NAME']
-missing_vars = [var for var in required_env_vars if not os.getenv(var)]
-if missing_vars:
-    error_msg = f"Erro: Variáveis de ambiente faltando: {', '.join(missing_vars)}. Configure-as no painel do Render ou no arquivo .env."
-    app.logger.error(error_msg)
-    raise ValueError(error_msg)
+# --- REMOVIDO: Bloco de validação de variáveis de ambiente do banco de dados ---
+# --- REMOVIDO: Bloco de conexão com o banco de dados MySQL ---
 
-# Conexão com o banco de dados
-try:
-    db = mysql.connector.connect(
-        host=os.getenv('DB_HOST'),
-        user=os.getenv('DB_USER'),
-        password=os.getenv('DB_PASSWORD'),
-        database=os.getenv('DB_NAME'),
-        port=int(os.getenv('DB_PORT', 3306)),  # Converte para inteiro, padrão 3306
-        connection_timeout=30  # Timeout de 30 segundos
-    )
-    app.logger.info("Conexão com o banco de dados MySQL estabelecida com sucesso.")
-except mysql.connector.Error as err:
-    error_msg = f"Erro de conexão com o MySQL: {err}"
-    app.logger.error(error_msg)
-    raise
+# ADICIONADO: "Banco de dados" em memória para simulação
+# Em um ambiente real, isso seria carregado de um arquivo ou de um banco de dados real.
+# ATENÇÃO: Estes dados são perdidos sempre que a aplicação é reiniciada.
+users_db = [
+    {"id": 1, "name": "Alice", "email": "alice@example.com", "password": "hashed_password_1"},
+    {"id": 2, "name": "Bob", "email": "bob@example.com", "password": "hashed_password_2"},
+    {"id": 3, "name": "Charlie", "email": "charlie@example.com", "password": "hashed_password_3"}
+]
+# Para gerar novos IDs de usuário
+next_user_id = 4
 
-# Endpoint para login de administrador
+# Endpoint para login de administrador (sem alterações, pois não usava o DB)
 @app.route('/admin/login', methods=['POST'])
 def admin_login():
     data = request.get_json()
     username = data.get('username')
     password = data.get('password')
 
-    # Verificar credenciais do administrador (exemplo simplificado)
     # Substitua por verificação contra uma tabela de admins no banco
     if username == 'admin' and password == 'admin123':
         access_token = create_access_token(identity=username, additional_claims={'role': 'admin'})
         return jsonify({'access_token': access_token}), 200
     return jsonify({'message': 'Credenciais inválidas'}), 401
 
-# Endpoint para listar usuários
+# Endpoint para listar usuários (MODIFICADO)
 @app.route('/users', methods=['GET'])
 @jwt_required()
 def get_users():
@@ -59,13 +47,10 @@ def get_users():
     if claims.get('role') != 'admin':
         return jsonify({'message': 'Acesso negado'}), 403
 
-    cursor = db.cursor(dictionary=True)
-    cursor.execute("SELECT id, name, email, password FROM users")
-    users = cursor.fetchall()
-    cursor.close()
-    return jsonify(users), 200
+    # MODIFICADO: Retorna a lista de usuários em memória diretamente
+    return jsonify(users_db), 200
 
-# Endpoint para excluir usuário
+# Endpoint para excluir usuário (MODIFICADO)
 @app.route('/admin/users/<int:user_id>', methods=['DELETE'])
 @jwt_required()
 def delete_user(user_id):
@@ -74,13 +59,47 @@ def delete_user(user_id):
     if claims.get('role') != 'admin':
         return jsonify({'message': 'Acesso negado'}), 403
 
-    cursor = db.cursor()
-    cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
-    db.commit()
-    cursor.close()
-    return jsonify({'message': 'Usuário excluído com sucesso'}), 200
+    # MODIFICADO: Lógica para encontrar e remover o usuário da lista em memória
+    user_to_delete = None
+    for user in users_db:
+        if user['id'] == user_id:
+            user_to_delete = user
+            break
+    
+    if user_to_delete:
+        users_db.remove(user_to_delete)
+        return jsonify({'message': 'Usuário excluído com sucesso'}), 200
+    else:
+        return jsonify({'message': 'Usuário não encontrado'}), 404
 
-# ... (outros endpoints do seu app.py)
+# ... (outros endpoints do seu app.py que você pode adicionar)
+# Exemplo: Endpoint para adicionar um novo usuário (sem banco de dados)
+@app.route('/admin/users', methods=['POST'])
+@jwt_required()
+def add_user():
+    global next_user_id
+    claims = get_jwt()
+    if claims.get('role') != 'admin':
+        return jsonify({'message': 'Acesso negado'}), 403
+        
+    data = request.get_json()
+    if not data or not data.get('name') or not data.get('email') or not data.get('password'):
+        return jsonify({'message': 'Dados incompletos'}), 400
+
+    new_user = {
+        "id": next_user_id,
+        "name": data['name'],
+        "email": data['email'],
+        "password": data['password'] # Em um caso real, você deveria usar bcrypt para hashear a senha
+    }
+    users_db.append(new_user)
+    next_user_id += 1
+    
+    return jsonify({'message': 'Usuário adicionado com sucesso', 'user': new_user}), 201
+
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Use host='0.0.0.0' para ser acessível na rede local
+    # A porta pode ser definida pelo Render ou usar 5000 como padrão
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=True, host='0.0.0.0', port=port)
