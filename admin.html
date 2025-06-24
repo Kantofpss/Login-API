@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel do Administrador</title>
+    <link rel="stylesheet" href="style.css"> </head>
+<body>
+    <div id="admin-container">
+        <div id="admin-login">
+            <h2>Login de Administrador</h2>
+            <form id="login-form">
+                <input type="text" id="username" placeholder="Usuário" required value="admin">
+                <input type="password" id="password" placeholder="Senha" required value="admin123">
+                <button type="submit">Entrar</button>
+            </form>
+            <p id="login-error" class="error-message"></p>
+        </div>
+
+        <div id="admin-panel" class="hidden">
+            <h2>Painel de Controle</h2>
+            <button id="logout-button">Sair</button>
+            
+            <h3>Lista de Usuários</h3>
+            <table id="user-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nome</th>
+                        <th>Email</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="user-list">
+                    </tbody>
+            </table>
+            
+            <hr>
+
+            <h3>Adicionar Novo Usuário</h3>
+            <form id="add-user-form">
+                <input type="text" id="new-name" placeholder="Nome" required>
+                <input type="email" id="new-email" placeholder="Email" required>
+                <input type="password" id="new-password" placeholder="Senha" required>
+                <button type="submit">Adicionar Usuário</button>
+            </form>
+            <p id="add-user-message"></p>
+        </div>
+    </div>
+
+    <script src="admin.js"></script>
+</body>
+</html>
